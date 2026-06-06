@@ -1,0 +1,23 @@
+{{define "base"}}<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{block "title" .}}МойРейтингГорода{{end}}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar__inner">
+      <a class="logo" href="/">МРГ<span class="logo__dot">.</span></a>
+      <span class="topbar__tagline">Анонимные отзывы о соседях по дому</span>
+    </div>
+  </header>
+  <main class="container">
+    {{block "content" .}}{{end}}
+  </main>
+  <footer class="footer">
+    <div class="container">Отзывы анонимны. Будьте добрее к соседям 🙂</div>
+  </footer>
+</body>
+</html>{{end}}

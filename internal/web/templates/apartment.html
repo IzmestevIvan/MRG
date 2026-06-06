@@ -1,0 +1,73 @@
+{{define "title"}}Квартира {{.Summary.Number}} — МРГ{{end}}
+{{define "content"}}
+  <a class="back" href="/">← ко всем квартирам</a>
+
+  <section class="apt-head">
+    <h1 class="apt-head__title">Квартира {{.Summary.Number}}</h1>
+    {{if .Summary.ReviewCount}}
+      <div class="apt-head__rating">
+        <span class="stars stars--lg">{{stars (roundi .Summary.AvgRating)}}</span>
+        <span class="apt-head__avg">{{printf "%.1f" .Summary.AvgRating}}</span>
+        <span class="apt-head__count">· {{.Summary.ReviewCount}} отзыв(ов)</span>
+      </div>
+    {{else}}
+      <p class="apt-head__count">Пока нет отзывов — оставьте первый.</p>
+    {{end}}
+  </section>
+
+  <section class="form-card">
+    <h2 class="form-card__title">Оставить анонимный отзыв</h2>
+    {{if .Error}}<p class="alert">{{.Error}}</p>{{end}}
+    <form method="post" action="/apartment/{{.Summary.Number}}/review">
+      <fieldset class="rating-pick">
+        <legend>Оценка</legend>
+        {{range $i := ratingsDesc}}
+          <input type="radio" id="r{{$i}}" name="rating" value="{{$i}}" required>
+          <label for="r{{$i}}" title="{{$i}}">★</label>
+        {{end}}
+      </fieldset>
+
+      <div class="tag-cols">
+        <fieldset class="tag-col tag-col--pro">
+          <legend>Что понравилось</legend>
+          {{range .ProsTags}}
+            <label class="chip chip--pro">
+              <input type="checkbox" name="pros" value="{{.}}"> {{.}}
+            </label>
+          {{end}}
+        </fieldset>
+        <fieldset class="tag-col tag-col--con">
+          <legend>Что не понравилось</legend>
+          {{range .ConsTags}}
+            <label class="chip chip--con">
+              <input type="checkbox" name="cons" value="{{.}}"> {{.}}
+            </label>
+          {{end}}
+        </fieldset>
+      </div>
+
+      <textarea class="comment" name="comment" rows="3" maxlength="500"
+                placeholder="Комментарий (необязательно)"></textarea>
+      <button class="btn btn--primary" type="submit">Отправить отзыв</button>
+    </form>
+  </section>
+
+  <section class="reviews">
+    <h2 class="section-title">Отзывы</h2>
+    {{if .Reviews}}
+      {{range .Reviews}}
+        <article class="review">
+          <div class="review__top">
+            <span class="stars">{{stars .Rating}}</span>
+            <time class="review__date">{{.CreatedAt.Format "02.01.2006"}}</time>
+          </div>
+          {{if .Pros}}<div class="tags">{{range .Pros}}<span class="tag tag--pro">{{.}}</span>{{end}}</div>{{end}}
+          {{if .Cons}}<div class="tags">{{range .Cons}}<span class="tag tag--con">{{.}}</span>{{end}}</div>{{end}}
+          {{if .Comment}}<p class="review__text">{{.Comment}}</p>{{end}}
+        </article>
+      {{end}}
+    {{else}}
+      <p class="empty">Отзывов пока нет.</p>
+    {{end}}
+  </section>
+{{end}}

@@ -1,0 +1,12 @@
+# Сборка
+/mrg
+/bin/
+
+# Покрытие тестами
+cover.out
+coverage.html
+
+# Среды разработки
+.idea/
+.vscode/
+*.swp
