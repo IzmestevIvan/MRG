@@ -82,9 +82,9 @@ func seedReview(t *testing.T, svc *service.Service, apartment, rating int) {
 	}
 }
 
-// --- Главная ---
+// --- Приветственная страница и карта ---
 
-func TestIndexEmpty(t *testing.T) {
+func TestWelcomePage(t *testing.T) {
 	h, _ := newTestServer(t)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -93,36 +93,36 @@ func TestIndexEmpty(t *testing.T) {
 		t.Fatalf("статус = %d, ожидалось 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Пока ни одного отзыва") {
-		t.Error("на пустой главной должно быть пустое состояние")
+	if !strings.Contains(body, "Как это работает") {
+		t.Error("на приветственной странице должна быть вводная информация")
 	}
-	if !strings.Contains(body, `id="map"`) {
-		t.Error("на главной должна быть карта")
+	if !strings.Contains(body, `href="/map"`) {
+		t.Error("приветственная страница должна вести на карту")
+	}
+	// Списка домов на приветственной странице быть не должно.
+	if strings.Contains(body, `id="map"`) {
+		t.Error("карты на приветственной странице быть не должно")
 	}
 }
 
-func TestIndexListsBuildings(t *testing.T) {
-	h, svc := newTestServer(t)
-	seedReview(t, svc, 42, 5)
-
+func TestMapPage(t *testing.T) {
+	h, _ := newTestServer(t)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map", nil))
 
+	if rec.Code != http.StatusOK {
+		t.Fatalf("статус = %d, ожидалось 200", rec.Code)
+	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Москва, Тверская, д. 7") {
-		t.Error("главная должна показывать адрес дома")
+	if !strings.Contains(body, `id="map"`) {
+		t.Error("на странице карты должна быть карта")
 	}
-	if !strings.Contains(body, "/building?") {
-		t.Error("карточка должна ссылаться на страницу дома")
+	if !strings.Contains(body, `id="search-form"`) {
+		t.Error("на странице карты должен быть поиск")
 	}
-}
-
-func TestIndexStoreErrorIs500(t *testing.T) {
-	h := newFailingServer(t)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("статус = %d, ожидалось 500", rec.Code)
+	// Список домов с отзывами убран — карточек на карте быть не должно.
+	if strings.Contains(body, "Дома с отзывами") {
+		t.Error("список домов на странице карты должен быть убран")
 	}
 }
 

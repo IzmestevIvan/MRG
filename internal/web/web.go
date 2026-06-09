@@ -25,7 +25,7 @@ var staticFS embed.FS
 // pages перечисляет страницы приложения. Каждая собирается в собственный
 // набор шаблонов вместе с base.html, чтобы блоки "content"/"title" разных
 // страниц не пересекались в общем пространстве имён html/template.
-var pages = []string{"index.html", "building.html"}
+var pages = []string{"welcome.html", "map.html", "building.html"}
 
 // Server связывает сервис и HTTP-маршруты.
 type Server struct {
@@ -58,7 +58,8 @@ func NewServer(svc *service.Service) (*Server, error) {
 // Routes возвращает http.Handler со всеми маршрутами приложения.
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", s.handleIndex)
+	mux.HandleFunc("GET /{$}", s.handleWelcome)
+	mux.HandleFunc("GET /map", s.handleMap)
 	mux.HandleFunc("GET /api/buildings", s.handleBuildingsAPI)
 	mux.HandleFunc("GET /building", s.handleBuilding)
 	mux.HandleFunc("POST /review", s.handleAddReview)
@@ -66,17 +67,15 @@ func (s *Server) Routes() http.Handler {
 	return mux
 }
 
-type indexData struct {
-	Buildings []model.BuildingSummary
+// handleWelcome отдаёт приветственную страницу с вводной информацией.
+func (s *Server) handleWelcome(w http.ResponseWriter, r *http.Request) {
+	s.render(w, http.StatusOK, "welcome.html", nil)
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	buildings, err := s.svc.Buildings()
-	if err != nil {
-		s.serverError(w, err)
-		return
-	}
-	s.render(w, http.StatusOK, "index.html", indexData{Buildings: buildings})
+// handleMap отдаёт страницу с картой и поиском адреса. Маркеры домов
+// подгружаются на фронтенде через /api/buildings.
+func (s *Server) handleMap(w http.ResponseWriter, r *http.Request) {
+	s.render(w, http.StatusOK, "map.html", nil)
 }
 
 // buildingMarker — компактное представление дома для карты на главной.

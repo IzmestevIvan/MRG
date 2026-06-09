@@ -37,9 +37,25 @@ body {
 .finder { display: flex; gap: 10px; flex-wrap: wrap; }
 .finder__input { flex: 1 1 220px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 16px; }
 
-.btn { border: 0; border-radius: 10px; padding: 12px 20px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.btn { display: inline-block; border: 0; border-radius: 10px; padding: 12px 20px; font-size: 16px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .btn--primary { background: var(--brand); color: #003049; }
 .btn--primary:hover { background: var(--brand-ink); color: #fff; }
+.btn--lg { padding: 14px 28px; font-size: 18px; }
+
+/* Приветственная страница */
+.welcome { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 40px 32px; margin: 24px 0; box-shadow: var(--shadow); text-align: center; }
+.welcome__title { font-size: 44px; letter-spacing: 1px; margin: 0 0 14px; }
+.welcome__lead { max-width: 640px; margin: 0 auto 24px; font-size: 18px; color: #444; }
+
+.steps__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.step { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+.step__num { width: 36px; height: 36px; border-radius: 50%; background: var(--brand); color: #003049; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.step__title { margin: 0 0 6px; font-size: 18px; }
+.step p { margin: 0; color: #555; }
+
+.promise { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 28px; margin: 24px 0; box-shadow: var(--shadow); }
+.promise__list { margin: 0 0 18px; padding-left: 20px; }
+.promise__list li { margin-bottom: 8px; }
 
 .section-title { font-size: 20px; margin: 28px 0 14px; }
 

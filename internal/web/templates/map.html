@@ -1,0 +1,18 @@
+{{define "title"}}Найти дом — ПОСОСЕДСКИ{{end}}
+{{define "content"}}
+  <a class="back" href="/">← на главную</a>
+
+  <div class="hero">
+    <h1 class="hero__title">Найдите свой дом</h1>
+    <p class="hero__sub">Введите адрес в поиске — затем выберите квартиру и оставьте анонимный отзыв.</p>
+
+    <form id="search-form" class="finder" autocomplete="off">
+      <input id="search-input" class="finder__input" type="text"
+             placeholder="Город, улица, дом — например: Москва, Тверская, 7" required>
+      <button class="btn btn--primary" type="submit">Найти</button>
+    </form>
+    <div id="search-results" class="search-results"></div>
+  </div>
+
+  <div id="map" class="map" data-api="/api/buildings"></div>
+{{end}}
