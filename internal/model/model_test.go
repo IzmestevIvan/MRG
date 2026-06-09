@@ -57,3 +57,30 @@ func TestTagSetsDoNotOverlap(t *testing.T) {
 		}
 	}
 }
+
+func TestAddressKeyNormalizes(t *testing.T) {
+	a := Address{City: "  Москва ", Street: "Тверская  улица", House: "1", Lat: 1, Lon: 2}
+	b := Address{City: "москва", Street: "тверская улица", House: "1", Lat: 9, Lon: 9}
+	// Регистр, лишние пробелы и координаты не влияют на ключ.
+	if a.Key() != b.Key() {
+		t.Errorf("ключи должны совпадать: %q vs %q", a.Key(), b.Key())
+	}
+	if a.Key() != "москва|тверская улица|1" {
+		t.Errorf("неожиданный ключ: %q", a.Key())
+	}
+}
+
+func TestAddressKeyDistinguishesHouses(t *testing.T) {
+	a := Address{City: "Москва", Street: "Тверская", House: "1"}
+	b := Address{City: "Москва", Street: "Тверская", House: "2"}
+	if a.Key() == b.Key() {
+		t.Error("дома с разными номерами должны иметь разные ключи")
+	}
+}
+
+func TestAddressDisplay(t *testing.T) {
+	a := Address{City: "Москва", Street: "Тверская", House: "7"}
+	if got := a.Display(); got != "Москва, Тверская, д. 7" {
+		t.Errorf("Display = %q", got)
+	}
+}

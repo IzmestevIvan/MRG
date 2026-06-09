@@ -2,7 +2,10 @@
 // анонимные отзывы и оценки жильцов многоквартирного дома по квартирам.
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // MinRating и MaxRating ограничивают диапазон оценки в звёздах.
 const (
@@ -67,9 +70,50 @@ func IsValidCon(t Tag) bool {
 	return ok
 }
 
-// Review — один анонимный отзыв на квартиру.
+// Address описывает конкретный дом во всероссийском масштабе: город, улица,
+// номер дома и географические координаты (выбираются на карте/в поиске).
+type Address struct {
+	City   string
+	Street string
+	House  string
+	Lat    float64
+	Lon    float64
+}
+
+// normalize приводит часть адреса к каноничному виду для построения ключа:
+// нижний регистр, обрезка и схлопывание пробелов.
+func normalize(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
+
+// Key возвращает стабильный идентификатор дома, не зависящий от регистра и
+// лишних пробелов. Координаты в ключ не входят — дом определяется адресом.
+func (a Address) Key() string {
+	return normalize(a.City) + "|" + normalize(a.Street) + "|" + normalize(a.House)
+}
+
+// Display форматирует адрес для отображения, например «Москва, Тверская, д. 1».
+func (a Address) Display() string {
+	return a.City + ", " + a.Street + ", д. " + a.House
+}
+
+// Building — дом, к которому привязаны отзывы по квартирам.
+type Building struct {
+	Key     string
+	Address Address
+}
+
+// BuildingSummary — агрегированная карточка дома для главной/карты.
+type BuildingSummary struct {
+	Building    Building
+	ReviewCount int
+	AvgRating   float64
+}
+
+// Review — один анонимный отзыв на квартиру в конкретном доме.
 type Review struct {
 	ID           int64
+	BuildingKey  string
 	ApartmentNum int
 	Rating       int
 	Pros         []Tag
@@ -78,7 +122,7 @@ type Review struct {
 	CreatedAt    time.Time
 }
 
-// ApartmentSummary — агрегированная карточка квартиры для списка/детальной страницы.
+// ApartmentSummary — агрегированная карточка квартиры внутри дома.
 type ApartmentSummary struct {
 	Number      int
 	ReviewCount int

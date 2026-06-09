@@ -1,31 +1,34 @@
-{{define "title"}}МРГ — рейтинг соседей{{end}}
+{{define "title"}}МРГ — отзывы о соседях по всей России{{end}}
 {{define "content"}}
   <div class="hero">
-    <h1 class="hero__title">Какие у вас соседи?</h1>
-    <p class="hero__sub">Оставьте анонимный отзыв по номеру квартиры — это поможет всему дому.</p>
-    <form class="finder" method="get" action="/apartment/0" onsubmit="this.action='/apartment/'+this.num.value; return this.num.value>0;">
-      <input class="finder__input" type="number" name="num" min="1" placeholder="Номер квартиры" required>
-      <button class="btn btn--primary" type="submit">Открыть</button>
+    <h1 class="hero__title">Какие соседи в этом доме?</h1>
+    <p class="hero__sub">Найдите дом на карте или через поиск, выберите квартиру и оставьте анонимный отзыв.</p>
+
+    <form id="search-form" class="finder" autocomplete="off">
+      <input id="search-input" class="finder__input" type="text"
+             placeholder="Город, улица, дом — например: Москва, Тверская, 7" required>
+      <button class="btn btn--primary" type="submit">Найти</button>
     </form>
+    <div id="search-results" class="search-results"></div>
   </div>
 
-  <h2 class="section-title">Квартиры с отзывами</h2>
-  {{if .Apartments}}
+  <div id="map" class="map" data-api="/api/buildings"></div>
+
+  <h2 class="section-title">Дома с отзывами</h2>
+  {{if .Buildings}}
     <div class="grid">
-      {{range .Apartments}}
-        <a class="card" href="/apartment/{{.Number}}">
-          <div class="card__head">
-            <span class="card__num">кв. {{.Number}}</span>
-            <span class="card__count">{{.ReviewCount}} отз.</span>
-          </div>
+      {{range .Buildings}}
+        <a class="card" href="{{buildingURL .Building.Address}}">
+          <div class="card__addr">{{.Building.Address.Display}}</div>
           <div class="card__rating">
             <span class="stars">{{stars (roundi .AvgRating)}}</span>
             <span class="card__avg">{{printf "%.1f" .AvgRating}}</span>
+            <span class="card__count">· {{.ReviewCount}} отз.</span>
           </div>
         </a>
       {{end}}
     </div>
   {{else}}
-    <p class="empty">Пока ни одного отзыва. Станьте первым — откройте квартиру выше.</p>
+    <p class="empty">Пока ни одного отзыва. Найдите свой дом на карте и станьте первым.</p>
   {{end}}
 {{end}}

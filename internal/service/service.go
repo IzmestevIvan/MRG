@@ -1,5 +1,6 @@
 // Package service содержит бизнес-логику MRG: валидацию входных данных
-// отзыва, нормализацию тегов и агрегацию оценок. Слой не зависит от HTTP.
+// отзыва и адреса, нормализацию тегов и агрегацию оценок по домам и
+// квартирам. Слой не зависит от HTTP.
 package service
 
 import (
@@ -18,10 +19,14 @@ const (
 	MaxCommentLen = 500
 	// MaxApartmentNum — верхняя граница номера квартиры (защита от мусора).
 	MaxApartmentNum = 10000
+	// MaxAddrFieldLen — максимальная длина части адреса в рунах.
+	MaxAddrFieldLen = 200
 )
 
 // Ошибки валидации, которые слой web может отображать пользователю.
 var (
+	ErrInvalidAddress   = errors.New("укажите город, улицу и номер дома")
+	ErrInvalidCoords    = errors.New("выберите дом на карте")
 	ErrInvalidApartment = errors.New("номер квартиры должен быть от 1 до 10000")
 	ErrInvalidRating    = errors.New("оценка должна быть от 1 до 5 звёзд")
 	ErrUnknownTag       = errors.New("неизвестный тег")
@@ -30,6 +35,7 @@ var (
 
 // NewReview — входные данные для создания отзыва (без ID и времени).
 type NewReview struct {
+	Address      model.Address
 	ApartmentNum int
 	Rating       int
 	Pros         []model.Tag
@@ -40,7 +46,7 @@ type NewReview struct {
 // Clock возвращает текущее время. Вынесен в интерфейс ради детерминированных тестов.
 type Clock func() time.Time
 
-// Service инкапсулирует операции над отзывами.
+// Service инкапсулирует операции над домами и отзывами.
 type Service struct {
 	store store.Store
 	now   Clock
@@ -54,8 +60,15 @@ func New(s store.Store, clock Clock) *Service {
 	return &Service{store: s, now: clock}
 }
 
-// AddReview валидирует и сохраняет новый отзыв.
+// AddReview валидирует адрес и отзыв, создаёт/обновляет дом и сохраняет отзыв.
 func (svc *Service) AddReview(in NewReview) (model.Review, error) {
+	addr, err := cleanAddress(in.Address)
+	if err != nil {
+		return model.Review{}, err
+	}
+	if !validCoords(addr.Lat, addr.Lon) {
+		return model.Review{}, ErrInvalidCoords
+	}
 	if in.ApartmentNum < 1 || in.ApartmentNum > MaxApartmentNum {
 		return model.Review{}, ErrInvalidApartment
 	}
@@ -77,7 +90,13 @@ func (svc *Service) AddReview(in NewReview) (model.Review, error) {
 		return model.Review{}, ErrCommentTooLong
 	}
 
+	key := addr.Key()
+	if err := svc.store.SaveBuilding(model.Building{Key: key, Address: addr}); err != nil {
+		return model.Review{}, err
+	}
+
 	return svc.store.AddReview(model.Review{
+		BuildingKey:  key,
 		ApartmentNum: in.ApartmentNum,
 		Rating:       in.Rating,
 		Pros:         pros,
@@ -87,23 +106,35 @@ func (svc *Service) AddReview(in NewReview) (model.Review, error) {
 	})
 }
 
-// Apartments возвращает сводки по всем квартирам с отзывами.
-func (svc *Service) Apartments() ([]model.ApartmentSummary, error) {
-	return svc.store.Apartments()
+// Buildings возвращает сводки по всем домам, у которых есть отзывы (для карты
+// и списка на главной).
+func (svc *Service) Buildings() ([]model.BuildingSummary, error) {
+	return svc.store.Buildings()
 }
 
-// Apartment возвращает сводку и отзывы по конкретной квартире. Если отзывов
-// нет, сводка содержит нулевые показатели (квартиру всё равно можно открыть).
-func (svc *Service) Apartment(num int) (model.ApartmentSummary, []model.Review, error) {
-	if num < 1 || num > MaxApartmentNum {
-		return model.ApartmentSummary{}, nil, ErrInvalidApartment
-	}
-	reviews, err := svc.store.ListByApartment(num)
+// Building возвращает сводку по дому, список квартир с отзывами и ленту
+// отзывов. Адрес для отображения берётся из аргумента (дом может быть ещё не
+// сохранён, если по нему пока нет отзывов).
+func (svc *Service) Building(addr model.Address) (model.BuildingSummary, []model.ApartmentSummary, []model.Review, error) {
+	clean, err := cleanAddress(addr)
 	if err != nil {
-		return model.ApartmentSummary{}, nil, err
+		return model.BuildingSummary{}, nil, nil, err
+	}
+	key := clean.Key()
+
+	reviews, err := svc.store.ListByBuilding(key)
+	if err != nil {
+		return model.BuildingSummary{}, nil, nil, err
+	}
+	apartments, err := svc.store.ApartmentsByBuilding(key)
+	if err != nil {
+		return model.BuildingSummary{}, nil, nil, err
 	}
 
-	summary := model.ApartmentSummary{Number: num, ReviewCount: len(reviews)}
+	summary := model.BuildingSummary{
+		Building:    model.Building{Key: key, Address: clean},
+		ReviewCount: len(reviews),
+	}
 	if len(reviews) > 0 {
 		var sum int
 		for _, r := range reviews {
@@ -111,7 +142,33 @@ func (svc *Service) Apartment(num int) (model.ApartmentSummary, []model.Review, 
 		}
 		summary.AvgRating = float64(sum) / float64(len(reviews))
 	}
-	return summary, reviews, nil
+	return summary, apartments, reviews, nil
+}
+
+// cleanAddress обрезает пробелы у частей адреса и проверяет их заполненность и
+// длину. Координаты не нормализуются (проверяются отдельно при создании отзыва).
+func cleanAddress(a model.Address) (model.Address, error) {
+	a.City = strings.TrimSpace(a.City)
+	a.Street = strings.TrimSpace(a.Street)
+	a.House = strings.TrimSpace(a.House)
+	if a.City == "" || a.Street == "" || a.House == "" {
+		return model.Address{}, ErrInvalidAddress
+	}
+	for _, f := range []string{a.City, a.Street, a.House} {
+		if len([]rune(f)) > MaxAddrFieldLen {
+			return model.Address{}, ErrInvalidAddress
+		}
+	}
+	return a, nil
+}
+
+// validCoords проверяет, что координаты в допустимом диапазоне и не нулевые
+// (нулевые означают, что дом на карте не выбран).
+func validCoords(lat, lon float64) bool {
+	if lat == 0 && lon == 0 {
+		return false
+	}
+	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
 }
 
 // normalizeTags убирает дубликаты, сохраняет порядок и проверяет допустимость.

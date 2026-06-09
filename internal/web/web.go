@@ -1,12 +1,15 @@
 // Package web реализует HTTP-слой MRG: серверный рендеринг страниц через
-// html/template и обработку формы отправки отзыва.
+// html/template, карту домов (Leaflet/OpenStreetMap на фронтенде) и обработку
+// формы отправки отзыва.
 package web
 
 import (
 	"embed"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/izmestevivan/mrg/internal/model"
@@ -22,7 +25,7 @@ var staticFS embed.FS
 // pages перечисляет страницы приложения. Каждая собирается в собственный
 // набор шаблонов вместе с base.html, чтобы блоки "content"/"title" разных
 // страниц не пересекались в общем пространстве имён html/template.
-var pages = []string{"index.html", "apartment.html"}
+var pages = []string{"index.html", "building.html"}
 
 // Server связывает сервис и HTTP-маршруты.
 type Server struct {
@@ -37,6 +40,8 @@ func NewServer(svc *service.Service) (*Server, error) {
 		"stars":       stars,
 		"roundi":      roundi,
 		"ratingsDesc": ratingsDesc,
+		"coord":       coord,
+		"buildingURL": buildingURL,
 	}
 	tmpls := make(map[string]*template.Template, len(pages))
 	for _, p := range pages {
@@ -54,54 +59,84 @@ func NewServer(svc *service.Service) (*Server, error) {
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleIndex)
-	mux.HandleFunc("GET /apartment/{num}", s.handleApartment)
-	mux.HandleFunc("POST /apartment/{num}/review", s.handleAddReview)
+	mux.HandleFunc("GET /api/buildings", s.handleBuildingsAPI)
+	mux.HandleFunc("GET /building", s.handleBuilding)
+	mux.HandleFunc("POST /review", s.handleAddReview)
 	mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
 	return mux
 }
 
 type indexData struct {
-	Apartments []model.ApartmentSummary
+	Buildings []model.BuildingSummary
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	apartments, err := s.svc.Apartments()
+	buildings, err := s.svc.Buildings()
 	if err != nil {
 		s.serverError(w, err)
 		return
 	}
-	s.render(w, http.StatusOK, "index.html", indexData{Apartments: apartments})
+	s.render(w, http.StatusOK, "index.html", indexData{Buildings: buildings})
 }
 
-type apartmentData struct {
-	Summary  model.ApartmentSummary
-	Reviews  []model.Review
-	ProsTags []model.Tag
-	ConsTags []model.Tag
-	Error    string
+// buildingMarker — компактное представление дома для карты на главной.
+type buildingMarker struct {
+	Lat     float64 `json:"lat"`
+	Lon     float64 `json:"lon"`
+	Title   string  `json:"title"`
+	URL     string  `json:"url"`
+	Avg     float64 `json:"avg"`
+	Reviews int     `json:"reviews"`
 }
 
-func (s *Server) handleApartment(w http.ResponseWriter, r *http.Request) {
-	num, ok := parseApartmentNum(w, r)
-	if !ok {
+func (s *Server) handleBuildingsAPI(w http.ResponseWriter, r *http.Request) {
+	buildings, err := s.svc.Buildings()
+	if err != nil {
+		s.serverError(w, err)
 		return
 	}
-	s.renderApartment(w, r, num, http.StatusOK, "")
+	markers := make([]buildingMarker, 0, len(buildings))
+	for _, b := range buildings {
+		markers = append(markers, buildingMarker{
+			Lat:     b.Building.Address.Lat,
+			Lon:     b.Building.Address.Lon,
+			Title:   b.Building.Address.Display(),
+			URL:     buildingURL(b.Building.Address),
+			Avg:     b.AvgRating,
+			Reviews: b.ReviewCount,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(markers)
+}
+
+type buildingData struct {
+	Address    model.Address
+	Summary    model.BuildingSummary
+	Apartments []model.ApartmentSummary
+	Reviews    []model.Review
+	ProsTags   []model.Tag
+	ConsTags   []model.Tag
+	Error      string
+}
+
+func (s *Server) handleBuilding(w http.ResponseWriter, r *http.Request) {
+	addr := addressFromValues(r.URL.Query())
+	s.renderBuilding(w, r, addr, http.StatusOK, "")
 }
 
 func (s *Server) handleAddReview(w http.ResponseWriter, r *http.Request) {
-	num, ok := parseApartmentNum(w, r)
-	if !ok {
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "некорректная форма", http.StatusBadRequest)
 		return
 	}
-
+	addr := addressFromValues(r.Form)
 	rating, _ := strconv.Atoi(r.FormValue("rating"))
+	apartment, _ := strconv.Atoi(r.FormValue("apartment"))
+
 	in := service.NewReview{
-		ApartmentNum: num,
+		Address:      addr,
+		ApartmentNum: apartment,
 		Rating:       rating,
 		Pros:         toTags(r.Form["pros"]),
 		Cons:         toTags(r.Form["cons"]),
@@ -109,35 +144,37 @@ func (s *Server) handleAddReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := s.svc.AddReview(in); err != nil {
-		// Ошибки валидации показываем на той же странице со статусом 400.
 		if isValidationError(err) {
-			s.renderApartment(w, r, num, http.StatusBadRequest, err.Error())
+			s.renderBuilding(w, r, addr, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.serverError(w, err)
 		return
 	}
 
-	// Перенаправляем (POST-Redirect-GET), чтобы избежать повторной отправки.
-	http.Redirect(w, r, "/apartment/"+strconv.Itoa(num), http.StatusSeeOther)
+	// POST-Redirect-GET: возвращаемся на страницу дома.
+	http.Redirect(w, r, buildingURL(addr), http.StatusSeeOther)
 }
 
-func (s *Server) renderApartment(w http.ResponseWriter, r *http.Request, num, status int, errMsg string) {
-	summary, reviews, err := s.svc.Apartment(num)
+func (s *Server) renderBuilding(w http.ResponseWriter, r *http.Request, addr model.Address, status int, errMsg string) {
+	summary, apartments, reviews, err := s.svc.Building(addr)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidApartment) {
-			http.NotFound(w, r)
+		if errors.Is(err, service.ErrInvalidAddress) {
+			// Адрес не выбран — отправляем на главную к карте.
+			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
 		s.serverError(w, err)
 		return
 	}
-	s.render(w, status, "apartment.html", apartmentData{
-		Summary:  summary,
-		Reviews:  reviews,
-		ProsTags: model.AllProsTags(),
-		ConsTags: model.AllConsTags(),
-		Error:    errMsg,
+	s.render(w, status, "building.html", buildingData{
+		Address:    summary.Building.Address,
+		Summary:    summary,
+		Apartments: apartments,
+		Reviews:    reviews,
+		ProsTags:   model.AllProsTags(),
+		ConsTags:   model.AllConsTags(),
+		Error:      errMsg,
 	})
 }
 
@@ -158,14 +195,28 @@ func (s *Server) serverError(w http.ResponseWriter, _ error) {
 	http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
 }
 
-// parseApartmentNum извлекает и проверяет {num} из пути.
-func parseApartmentNum(w http.ResponseWriter, r *http.Request) (int, bool) {
-	num, err := strconv.Atoi(r.PathValue("num"))
-	if err != nil || num < 1 {
-		http.NotFound(w, r)
-		return 0, false
+// addressFromValues извлекает адрес из query- или form-параметров.
+func addressFromValues(v url.Values) model.Address {
+	lat, _ := strconv.ParseFloat(v.Get("lat"), 64)
+	lon, _ := strconv.ParseFloat(v.Get("lon"), 64)
+	return model.Address{
+		City:   v.Get("city"),
+		Street: v.Get("street"),
+		House:  v.Get("house"),
+		Lat:    lat,
+		Lon:    lon,
 	}
-	return num, true
+}
+
+// buildingURL строит ссылку на страницу дома с адресом в query-параметрах.
+func buildingURL(a model.Address) string {
+	v := url.Values{}
+	v.Set("city", a.City)
+	v.Set("street", a.Street)
+	v.Set("house", a.House)
+	v.Set("lat", coord(a.Lat))
+	v.Set("lon", coord(a.Lon))
+	return "/building?" + v.Encode()
 }
 
 func toTags(values []string) []model.Tag {
@@ -177,10 +228,17 @@ func toTags(values []string) []model.Tag {
 }
 
 func isValidationError(err error) bool {
-	return errors.Is(err, service.ErrInvalidApartment) ||
+	return errors.Is(err, service.ErrInvalidAddress) ||
+		errors.Is(err, service.ErrInvalidCoords) ||
+		errors.Is(err, service.ErrInvalidApartment) ||
 		errors.Is(err, service.ErrInvalidRating) ||
 		errors.Is(err, service.ErrUnknownTag) ||
 		errors.Is(err, service.ErrCommentTooLong)
+}
+
+// coord форматирует координату для URL/шаблона с фиксированной точностью.
+func coord(f float64) string {
+	return strconv.FormatFloat(f, 'f', 6, 64)
 }
 
 // ratingsDesc возвращает варианты оценки от 5 до 1 — порядок важен для

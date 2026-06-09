@@ -43,6 +43,27 @@ body {
 
 .section-title { font-size: 20px; margin: 28px 0 14px; }
 
+/* Поиск адреса и результаты */
+.search-results { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.result { text-align: left; background: #f6f6f6; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; font: inherit; }
+.result:hover { border-color: var(--brand); background: #eef9ff; }
+
+/* Карта */
+.map { height: 420px; border-radius: var(--radius); border: 1px solid var(--line); margin: 8px 0 8px; z-index: 0; }
+.map--mini { height: 240px; }
+
+/* Адрес в карточке дома */
+.card__addr { font-weight: 700; font-size: 16px; margin-bottom: 10px; line-height: 1.35; }
+
+/* Поле формы */
+.field { margin-bottom: 16px; }
+.field__label { display: block; font-weight: 600; margin-bottom: 6px; }
+
+/* Квартиры-чипы на странице дома */
+.apt-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.apt-chip { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+.review__apt { font-weight: 700; }
+
 /* Сетка карточек */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
 .card { display: block; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; text-decoration: none; color: inherit; box-shadow: var(--shadow); transition: transform .08s ease, box-shadow .08s ease; }

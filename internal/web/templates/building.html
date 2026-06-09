@@ -1,9 +1,9 @@
-{{define "title"}}Квартира {{.Summary.Number}} — МРГ{{end}}
+{{define "title"}}{{.Address.Display}} — МРГ{{end}}
 {{define "content"}}
-  <a class="back" href="/">← ко всем квартирам</a>
+  <a class="back" href="/">← к карте</a>
 
   <section class="apt-head">
-    <h1 class="apt-head__title">Квартира {{.Summary.Number}}</h1>
+    <h1 class="apt-head__title">{{.Address.Display}}</h1>
     {{if .Summary.ReviewCount}}
       <div class="apt-head__rating">
         <span class="stars stars--lg">{{stars (roundi .Summary.AvgRating)}}</span>
@@ -15,10 +15,35 @@
     {{end}}
   </section>
 
+  <div id="bmap" class="map map--mini" data-lat="{{coord .Address.Lat}}" data-lon="{{coord .Address.Lon}}"></div>
+
+  {{if .Apartments}}
+    <section class="apts">
+      <h2 class="section-title">Квартиры с отзывами</h2>
+      <div class="apt-chips">
+        {{range .Apartments}}
+          <span class="apt-chip">кв. {{.Number}} <span class="stars">{{stars (roundi .AvgRating)}}</span> <b>{{printf "%.1f" .AvgRating}}</b></span>
+        {{end}}
+      </div>
+    </section>
+  {{end}}
+
   <section class="form-card">
     <h2 class="form-card__title">Оставить анонимный отзыв</h2>
     {{if .Error}}<p class="alert">{{.Error}}</p>{{end}}
-    <form method="post" action="/apartment/{{.Summary.Number}}/review">
+    <form method="post" action="/review">
+      <input type="hidden" name="city" value="{{.Address.City}}">
+      <input type="hidden" name="street" value="{{.Address.Street}}">
+      <input type="hidden" name="house" value="{{.Address.House}}">
+      <input type="hidden" name="lat" value="{{coord .Address.Lat}}">
+      <input type="hidden" name="lon" value="{{coord .Address.Lon}}">
+
+      <div class="field">
+        <label class="field__label" for="apartment">Номер квартиры</label>
+        <input id="apartment" class="finder__input" type="number" name="apartment"
+               min="1" max="10000" placeholder="например, 42" required>
+      </div>
+
       <fieldset class="rating-pick">
         <legend>Оценка</legend>
         {{range $i := ratingsDesc}}
@@ -58,6 +83,7 @@
       {{range .Reviews}}
         <article class="review">
           <div class="review__top">
+            <span class="review__apt">кв. {{.ApartmentNum}}</span>
             <span class="stars">{{stars .Rating}}</span>
             <time class="review__date">{{.CreatedAt.Format "02.01.2006"}}</time>
           </div>
